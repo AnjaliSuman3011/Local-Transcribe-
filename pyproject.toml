@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-transcribe"
+version = "0.1.0"
+description = "Transcribe video/audio files locally with open-source Whisper. Free, no API keys."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+# Apple Silicon Macs (M1/M2/M3/M4): fastest option, uses the Mac GPU
+mlx = ["mlx-whisper>=0.4"]
+# Everything else (Intel Mac, Linux, Windows; NVIDIA GPU if present)
+faster = ["faster-whisper>=1.1"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+transcribe = "local_transcribe.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

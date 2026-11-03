@@ -1,0 +1,153 @@
+# local-transcribe
+
+Transcribe video and audio recordings **on your own machine** with open-source
+[Whisper](https://github.com/openai/whisper). There are no API keys and no per-minute cost, and
+the audio never leaves your laptop (URL inputs are downloaded straight to your machine).
+
+```
+recording.mp4 ──ffmpeg──▶ 16 kHz mono audio ──Whisper (local)──▶ cleanup ──▶ recording.txt
+```
+
+- **Input:** `.mp4` (primary), plus `.mov .mkv .webm .mp3 .wav .m4a`. Inputs can be files, folders, URLs, or a CSV/TXT list.
+- **Output:** `.txt` by default; `.srt` (subtitles with timestamps) and `.json` (segments) on request.
+- **Batch-friendly:** if a file fails, the tool logs it and moves on. Re-running the same command skips finished files, and a `manifest.csv` records the status of every file.
+
+---
+
+## 1. Install (one time, ~5 minutes)
+
+You need **Python 3.9+** and **ffmpeg**.
+
+```bash
+# ffmpeg
+brew install ffmpeg            # Mac
+# sudo apt install ffmpeg      # Ubuntu/Debian
+
+# the tool
+git clone <this-repo-url> local-transcribe
+cd local-transcribe
+python3 -m venv .venv && source .venv/bin/activate
+```
+
+Then install **one** engine:
+
+| Your machine | Command | Why |
+|---|---|---|
+| Mac with Apple Silicon (M1–M4) | `pip install -e '.[mlx]'` | Runs on the Mac GPU, by far the fastest option on a Mac |
+| Intel Mac, Linux, Windows | `pip install -e '.[faster]'` | Runs on CPU, or uses an NVIDIA GPU automatically if one is present |
+
+Check the setup:
+
+```bash
+transcribe --check
+```
+
+You should see `ffmpeg: OK` and a `default:` engine. The first real run downloads the model
+(~1.5 GB for the default `large-v3-turbo`) and caches it. Later runs start immediately.
+
+## 2. Run it
+
+```bash
+transcribe call.mp4                      # -> transcripts/call.txt
+transcribe ~/Recordings/                 # every supported file in the folder (recursive)
+transcribe https://host/path/rec.mp4     # a URL
+transcribe call.mp4 -f txt,srt           # also write subtitles
+transcribe call.mp4 -l en                # force English (default: auto-detect per file)
+transcribe --help                        # all options
+```
+
+### From a Google Sheet (batch of recording links)
+
+1. In the sheet: **File → Download → Comma-separated values (.csv)** for the tab with the links.
+2. Run it, telling the tool which column holds the link and which column to name files by:
+
+```bash
+transcribe --list "DE Session - Audit - Mapped to DE.csv" \
+  --url-column recording_link --id-column prospect_id -l en
+```
+
+Each transcript is saved as `transcripts/<prospect_id>.txt`, so you can match it back to its row.
+`transcripts/manifest.csv` lists every file with its status (`done` / `error`), audio length and
+processing time.
+
+**Interrupted or a few failed?** Run the exact same command again. Finished files are skipped,
+and only the missing or failed ones are processed.
+
+## 3. Choosing a model
+
+| Model | Speed | Accuracy | Use when |
+|---|---|---|---|
+| `large-v3-turbo` (default) | fast | very good for English | most calls |
+| `large-v3` | several times slower | best, especially non-English | heavy Hindi / mixed-language audio |
+| `small`, `base`, `tiny` | fastest | noticeably worse | quick tests only |
+
+```bash
+transcribe call.mp4 -m large-v3
+```
+
+**Speed depends on your machine.** Run one file first and check `speed_x_realtime` in
+`manifest.csv`. For example, 10.0 means one hour of audio takes about 6 minutes. Multiply that
+out to plan a big batch, and keep the laptop plugged in and awake (`caffeinate -i transcribe ...`
+on Mac).
+
+## 4. Good to know
+
+- **Repetition cleanup.** On silence, Whisper sometimes loops a phrase ("thank you thank you
+  ..."). The tool collapses any phrase repeated 4+ times back-to-back into a single copy, and
+  drops runs of identical segments. Real repeats like "no no no no" are shortened too.
+- **No speaker labels.** The transcript is one stream of text and doesn't say who is speaking.
+- **Hindi / Hinglish:** auto-detect handles it, but accuracy is lower than for English. Use
+  `-m large-v3` and spot-check the results.
+- **Privacy:** transcripts often contain personal data (names, salaries, phone numbers).
+  `transcripts/` and media files are git-ignored. Don't commit them.
+
+## 5. Extending
+
+The tool is built around three small registries, so adding support means writing one function or class:
+
+**New input format.** If ffmpeg can read it, add the extension in `src/local_transcribe/audio.py`:
+```python
+INPUT_FORMATS[".flac"] = "audio"
+```
+For something ffmpeg can't read directly, register a custom extractor that writes a 16 kHz mono WAV:
+```python
+from local_transcribe.audio import register_extractor
+register_extractor(".xyz", lambda source, out_wav, is_url: ...)
+```
+
+**New output format.** Add a writer in `src/local_transcribe/writers.py`:
+```python
+@writer("md")
+def write_md(t: Transcript, path: Path) -> None:
+    path.write_text("\n\n".join(s.text for s in t.segments))
+```
+
+**New engine** (e.g. whisper.cpp or a cloud API). Subclass `Engine` in `src/local_transcribe/engines.py`:
+```python
+@register("my-engine")
+class MyEngine(Engine):
+    @classmethod
+    def is_installed(cls): ...
+    def transcribe(self, wav, language) -> Transcript: ...
+```
+It then appears in `transcribe --check` and `--engine`.
+
+## 6. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `ffmpeg not found` | `brew install ffmpeg`, then open a new terminal |
+| `No transcription engine installed` | Activate the venv (`source .venv/bin/activate`) and install an engine (step 1) |
+| `Could not load model` | The first run needs internet to download the model; check your network or VPN |
+| A file shows `error` in the manifest | Read the `error` column. An expired or private link is the usual cause. Fix it and re-run |
+| Very slow on a Mac | Check `transcribe --check` says `default: mlx`. faster-whisper on CPU is much slower |
+
+## Development
+
+```bash
+pip install -e '.[dev]'
+pytest -q        # uses a stub engine, so no model download is needed
+```
+
+Layout: `cli.py` (arguments) → `sources.py` (inputs → jobs) → `pipeline.py` (per job: `audio.py`
+extract → `engines.py` transcribe → `cleanup.py` → `writers.py`, then update the manifest).

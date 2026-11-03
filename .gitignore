@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.DS_Store
+
+# Outputs and media: transcripts can contain personal data, keep them out of git
+transcripts/
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.mp3
+*.wav
+*.m4a
