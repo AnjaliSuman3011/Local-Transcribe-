@@ -85,6 +85,53 @@ and only the missing or failed ones are processed.
 transcribe call.mp4 -m large-v3
 ```
 
+### Which model should I use? (first-time users start here)
+
+Measured on a 3-minute English sales call, Apple Silicon MacBook (16 GB), plugged in:
+
+| Model (`-m` value) | Download | Time | Speed | WER* (lower = better) |
+|---|---|---|---|---|
+| `mlx-community/whisper-small-mlx-q4` | 0.2 GB | 9 s | 21x real-time | 10.9% |
+| `small` | 0.5 GB | 11 s | 16x | 11.4% |
+| `medium` | 1.5 GB | 21 s | 8.5x | 12.1% |
+| `large-v3` | 3 GB | 38 s | 5x | 13.5% |
+| `large-v3-turbo` (default) | 1.6 GB | 24 s | 7x | 13.7% |
+| `base` | 0.15 GB | 5 s | 39x | 15.4% |
+
+\*Word error rate against a reference transcript from another tool (not a human transcript),
+on one 3-minute English call (422 words). A 1-2 point gap is only a few words, so treat the top
+four as roughly tied. Not recommended: `distil-whisper-large-v3`, `whisper-medium.en-mlx` and
+`whisper-large-v3-turbo-q4` (all 15-17% WER, English-only or no faster).
+
+- **Clear, mostly English calls:** start with `small` (fast, small download, best score here).
+  `base` is fastest if you can accept a few more errors.
+  `transcribe call.mp4 -m small -l en`
+- **Heavy Hindi or mixed-language (Hinglish) audio:** use `large-v3`. The smaller models make many more mistakes on it.
+  **Use this command:** `transcribe call.mp4 -m large-v3`
+  For a CSV batch: `transcribe --list file.csv --url-column recording_link --id-column prospect_id -m large-v3`
+- Not sure? Leave the default (`large-v3-turbo`), which is what runs when you don't pass `-m`.
+- The `large-v3` recommendation for Hindi / mixed audio is untested on our sample (it was English only). Spot-check the first results.
+
+> **Plug in the charger and turn off Low Power Mode** (System Settings → Battery). On battery
+> with Low Power Mode on, we measured the same model running about 12x slower.
+> The first run of each model also downloads it (`small` ~0.5 GB, `large-v3` ~3 GB), so don't use that run to judge speed.
+
+### Optional: faster-whisper engine (not benchmarked)
+
+We did not benchmark this engine. It is the right choice on **Intel Mac, Linux or Windows**, and it
+is available on a Mac too if you want to try it:
+
+```bash
+source .venv/bin/activate
+pip install -e '.[faster]'          # installs it next to (or instead of) MLX
+transcribe --check                  # should now list "faster-whisper  installed"
+transcribe call.mp4 --engine faster-whisper -m small -l en
+```
+
+Notes: it runs on CPU unless an NVIDIA GPU is present, so it is much slower than MLX on Apple
+Silicon. Model names are the standard Whisper names (`small`, `large-v3`, ...) and are downloaded
+on first use. The first-run download rules and the Low Power Mode warning above still apply.
+
 **Speed depends on your machine.** Run one file first and check `speed_x_realtime` in
 `manifest.csv`. For example, 10.0 means one hour of audio takes about 6 minutes. Multiply that
 out to plan a big batch, and keep the laptop plugged in and awake (`caffeinate -i transcribe ...`

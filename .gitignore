@@ -15,3 +15,5 @@ transcripts/
 *.mp3
 *.wav
 *.m4a
+
+bench/
