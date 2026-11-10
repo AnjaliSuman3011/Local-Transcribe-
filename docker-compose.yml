@@ -1,0 +1,10 @@
+# Usage: docker compose run --rm transcribe /recordings/call.mp4 -m small -l en
+services:
+  transcribe:
+    build: .
+    volumes:
+      - ./recordings:/recordings:ro   # put your audio/video here
+      - ./transcripts:/work/transcripts   # results appear here
+      - models:/models                # model cache (downloaded once)
+volumes:
+  models:

@@ -14,36 +14,67 @@ recording.mp4 ──ffmpeg──▶ 16 kHz mono audio ──Whisper (local)─�
 
 ---
 
-## 1. Install (one time, ~5 minutes)
+## 1. Setup: which one do I use?
+
+| Your computer | Use | Why |
+|---|---|---|
+| **Mac (Apple Silicon, M1-M4)** | [Native setup](#native-mac-apple-silicon) | Faster: uses the Mac GPU via MLX |
+| **Windows / non-Mac** | [Docker setup](#docker-windows) | CPU-only and slower, but no manual Python/ffmpeg setup |
+
+### NATIVE (Mac, Apple Silicon)
 
 You need **Python 3.9+** and **ffmpeg**.
 
 ```bash
-# ffmpeg
-brew install ffmpeg            # Mac
-# sudo apt install ffmpeg      # Ubuntu/Debian
-
-# the tool
-git clone <this-repo-url> local-transcribe
+brew install ffmpeg
+git clone https://github.com/AnjaliSuman3011/Local-Transcribe-.git local-transcribe
 cd local-transcribe
 python3 -m venv .venv && source .venv/bin/activate
+pip install -e '.[mlx]'
+transcribe --check          # expect "ffmpeg: OK" and "default: mlx"
 ```
 
-Then install **one** engine:
-
-| Your machine | Command | Why |
-|---|---|---|
-| Mac with Apple Silicon (M1–M4) | `pip install -e '.[mlx]'` | Runs on the Mac GPU, by far the fastest option on a Mac |
-| Intel Mac, Linux, Windows | `pip install -e '.[faster]'` | Runs on CPU, or uses an NVIDIA GPU automatically if one is present |
-
-Check the setup:
+Run it:
 
 ```bash
-transcribe --check
+transcribe call.mp4 -m small -l en          # clear English audio
+transcribe call.mp4 -m large-v3             # heavy Hindi / mixed-language audio
 ```
 
-You should see `ffmpeg: OK` and a `default:` engine. The first real run downloads the model
-(~1.5 GB for the default `large-v3-turbo`) and caches it. Later runs start immediately.
+The first run of each model downloads it (`small` ~0.5 GB, `large-v3` ~3 GB) and caches it.
+Plug in the charger and turn off Low Power Mode, or it runs about 12x slower.
+Other platforms (Intel Mac, Linux) can use `pip install -e '.[faster]'` instead.
+
+### DOCKER (Windows)
+
+You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) only. No Python or ffmpeg.
+
+> **CPU only, so slower than the Mac setup.** The container runs `faster-whisper` on CPU
+> (MLX cannot use the GPU inside Docker). **Windows users should prefer the `small` or `base`
+> model.** Give Docker Desktop 8 GB+ of memory.
+
+```bash
+git clone https://github.com/AnjaliSuman3011/Local-Transcribe-.git local-transcribe
+cd local-transcribe
+docker compose build
+```
+
+Local file (put it in the `recordings` folder; transcripts appear in `transcripts`):
+
+```bash
+mkdir recordings
+copy C:\path\to\call.mp4 recordings\
+docker compose run --rm transcribe /recordings/call.mp4 -m small -l en
+```
+
+URL (no input folder needed):
+
+```bash
+docker compose run --rm transcribe https://host/path/rec.mp4 -m small -l en
+```
+
+Models are cached in a Docker volume, so each downloads only once. For heavy Hindi / mixed
+audio, use `-m large-v3` (much slower on CPU).
 
 ## 2. Run it
 

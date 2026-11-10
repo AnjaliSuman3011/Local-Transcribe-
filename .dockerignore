@@ -1,0 +1,15 @@
+.git
+.venv
+bench
+transcripts
+recordings
+tests
+*.wav
+*.mp3
+*.mp4
+*.m4a
+*.mov
+*.mkv
+*.webm
+__pycache__
+*.egg-info
